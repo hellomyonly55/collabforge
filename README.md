@@ -1,5 +1,7 @@
 # CollabForge
 
+**简体中文** | [English](README.en.md)
+
 **Team Collaboration & Project Management Platform**
 
 CollabForge 是一个团队项目协作平台，提供团队与成员管理、项目看板、任务分配、评论、活动记录和统计分析，帮助团队跟踪工作进度并管理协作流程。
