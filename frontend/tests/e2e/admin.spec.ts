@@ -1,0 +1,24 @@
+import {test,expect} from '@playwright/test'
+test('真实管理员后台、禁用撤销会话、启用及归档隔离',async({page,context,browser,baseURL},testInfo)=>{
+ test.skip(!process.env.TASKFLOW_E2E_ADMIN_EMAIL,'Use scripts/test-e2e.sh to initialize isolated CLI accounts')
+ const adminEmail=process.env.TASKFLOW_E2E_ADMIN_EMAIL!,adminPassword=process.env.TASKFLOW_E2E_ADMIN_PASSWORD!,email=process.env.TASKFLOW_E2E_MEMBER_EMAIL!,password=process.env.TASKFLOW_E2E_MEMBER_PASSWORD!
+ const member=await browser.newContext({baseURL}),other=await browser.newContext({baseURL}),mobile=await browser.newContext({baseURL,viewport:{width:390,height:844}})
+ try{
+  expect((await member.request.post('/api/v1/auth/login',{data:{email,password}})).status()).toBe(200);expect((await other.request.post('/api/v1/auth/login',{data:{email,password}})).status()).toBe(200)
+  const me=await member.request.get('/api/v1/me');expect(me.status()).toBe(200);const user=(await me.json()).data
+  const teamResponse=await member.request.post('/api/v1/teams',{data:{name:'后台归档验收团队'}});expect(teamResponse.status()).toBe(201);const team=(await teamResponse.json()).data
+  const projectResponse=await member.request.post(`/api/v1/teams/${team.id}/projects`,{data:{name:'平台角色边界验收'}});expect(projectResponse.status()).toBe(201);const project=(await projectResponse.json()).data
+  expect((await member.request.post(`/api/v1/projects/${project.id}/tasks`,{data:{title:'归档后必须只读'}})).status()).toBe(201)
+  const memberPage=await member.newPage();await memberPage.goto('/admin');await expect(memberPage.getByRole('heading',{name:'没有访问权限'})).toBeVisible();expect((await member.request.get('/api/v1/admin/users')).status()).toBe(403)
+  await page.goto('/login');await page.getByLabel('邮箱',{exact:true}).fill(adminEmail);await page.getByLabel('密码',{exact:true}).fill(adminPassword);await page.getByRole('button',{name:'登录',exact:true}).click();await page.getByRole('link',{name:'管理员后台',exact:true}).click();await expect(page.locator('[data-admin-stat="users"]')).toHaveText('2');await expect(page.locator('[data-admin-stat="tasks"]')).toHaveText('1')
+  await page.screenshot({path:testInfo.outputPath('admin-statistics.png'),fullPage:true,animations:'disabled'})
+  await page.getByRole('link',{name:'用户管理',exact:true}).click();await page.getByLabel('关键词',{exact:true}).fill(email);await page.getByRole('button',{name:'查询',exact:true}).click();const row=page.locator(`[data-admin-user="${user.id}"]`);await expect(row).toContainText('普通用户');await row.getByRole('button',{name:'禁用账号',exact:true}).click();await page.getByLabel('操作原因',{exact:true}).fill('账号异常，暂时停用并复核');await page.getByRole('button',{name:'确认操作',exact:true}).click();await expect(row).toContainText('已禁用')
+  expect((await member.request.get('/api/v1/me')).status()).toBe(401);expect((await other.request.get('/api/v1/me')).status()).toBe(401);expect((await other.request.post('/api/v1/auth/login',{data:{email,password}})).status()).toBe(401)
+  await page.screenshot({path:testInfo.outputPath('admin-users.png'),fullPage:true,animations:'disabled'})
+  await row.getByRole('button',{name:'启用账号',exact:true}).click();await page.getByLabel('操作原因',{exact:true}).fill('复核通过，恢复登录');await page.getByRole('button',{name:'确认操作',exact:true}).click();await expect(row).toContainText('活跃');expect((await member.request.get('/api/v1/me')).status()).toBe(401);expect((await member.request.post('/api/v1/auth/login',{data:{email,password}})).status()).toBe(200)
+  expect((await context.request.get(`/api/v1/teams/${team.id}`)).status()).toBe(404);expect((await context.request.get(`/api/v1/projects/${project.id}/tasks`)).status()).toBe(404)
+  await page.getByRole('link',{name:'团队查看',exact:true}).click();await page.getByLabel('关键词',{exact:true}).fill('后台归档验收团队');await page.getByRole('button',{name:'查询',exact:true}).click();const teamRow=page.locator(`[data-admin-team="${team.id}"]`);await expect(teamRow).toContainText(email);await teamRow.getByRole('button',{name:'归档团队',exact:true}).click();await page.getByLabel('操作原因',{exact:true}).fill('违规团队归档演示');await page.getByRole('button',{name:'确认操作',exact:true}).click();await expect(teamRow).toContainText('已归档');expect((await member.request.post(`/api/v1/teams/${team.id}/projects`,{data:{name:'必须拒绝'}})).status()).toBe(409)
+  const teamData=await member.request.get(`/api/v1/teams/${team.id}`);expect(teamData.status()).toBe(200);expect((await teamData.json()).data.owner_id).toBe(user.id)
+  await mobile.addCookies(await context.cookies());const mobilePage=await mobile.newPage();await mobilePage.goto('/admin/teams');await expect(mobilePage.locator('[data-admin-team]')).toHaveCount(1);expect(await mobilePage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await mobilePage.screenshot({path:testInfo.outputPath('admin-mobile.png'),fullPage:true,animations:'disabled'})
+ }finally{await member.close();await other.close();await mobile.close()}
+})

@@ -1,0 +1,17 @@
+.env
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+backend/bin/
+frontend/test-results/
+frontend/playwright-report/
+
+.local/
+
+# Private environment overrides and local credentials
+.env.*
+!.env.example
+*.pem
+*.key

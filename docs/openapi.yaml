@@ -1,0 +1,2841 @@
+openapi: 3.0.3
+info:
+  title: CollabForge API
+  version: 1.0.0
+  description: CollabForge 1.0，阶段 0—8 已完成，已实现协作业务、任务统计和平台管理员后台。初始管理员只能通过 CLI 创建，无默认密码或公开提权接口。ID 输出为字符串，密码不进入响应。
+servers:
+  - url: /api/v1
+paths:
+  /health/live:
+    get:
+      operationId: getLiveness
+      summary: 检查 HTTP 进程存活，不要求依赖可用
+      responses:
+        '200':
+          description: 进程存活
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthEnvelope'
+  /health/ready:
+    get:
+      operationId: getReadiness
+      summary: 检查真实 MySQL、Redis 和迁移状态
+      responses:
+        '200':
+          description: 全部依赖可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthEnvelope'
+        '503':
+          description: 至少一个依赖不可用；data.checks 包含诊断状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthEnvelope'
+  /auth/register:
+    post:
+      operationId: register
+      summary: 注册用户，成功后前往登录页
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /auth/login:
+    post:
+      operationId: login
+      summary: 登录并设置 7 天 HttpOnly 会话 Cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 成功
+          headers:
+            Set-Cookie:
+              description: HttpOnly、SameSite=Lax、Path=/；HTTPS 来源启用 Secure；退出或改密时清除
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: 撤销当前会话并清除 Cookie，可重复调用
+      responses:
+        '204':
+          description: 成功
+          headers:
+            Set-Cookie:
+              description: HttpOnly、SameSite=Lax、Path=/；HTTPS 来源启用 Secure；退出或改密时清除
+              schema:
+                type: string
+        '503':
+          $ref: '#/components/responses/Error'
+  /me:
+    get:
+      operationId: getMe
+      summary: 查询当前用户
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '401':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateMe
+      summary: 修改当前用户昵称
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /me/password:
+    put:
+      operationId: changePassword
+      summary: 验证原密码并更新密码，撤销所有会话
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordRequest'
+      responses:
+        '204':
+          description: 成功
+          headers:
+            Set-Cookie:
+              description: HttpOnly、SameSite=Lax、Path=/；HTTPS 来源启用 Secure；退出或改密时清除
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams:
+    get:
+      operationId: listTeams
+      summary: 列出本人加入的团队
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, active, archived]
+            default: all
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamPageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createTeam
+      summary: 创建团队，当前用户成为所有者
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/join:
+    post:
+      operationId: joinTeam
+      summary: 使用邀请码加入；已加入时不扣次数
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinTeamRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinedTeamEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    get:
+      operationId: getTeam
+      summary: 查看团队详情
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateTeam
+      summary: 所有者或管理员编辑团队资料
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTeamRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}/archive:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    post:
+      operationId: archiveTeam
+      summary: 所有者归档团队；归档后仅可查看
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}/leave:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    post:
+      operationId: leaveTeam
+      summary: 退出团队；所有者必须先转让
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}/transfer-ownership:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    post:
+      operationId: transferTeam
+      summary: 转让给其他活跃成员，原所有者成为管理员
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferOwnershipRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}/members:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    get:
+      operationId: listTeamMembers
+      summary: 列出当前成员
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}/members/{userId}:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    patch:
+      operationId: setMemberRole
+      summary: 所有者设置管理员或普通成员
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamRoleRequest'
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: removeMember
+      summary: 所有者移除非所有者；管理员仅可移除普通成员
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}/invites:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    get:
+      operationId: listTeamInvites
+      summary: 所有者或管理员查看邀请元数据，不返回原始码
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitePageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createTeamInvite
+      summary: 生成邀请码，仅在创建响应显示一次
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamInviteRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteCreatedEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}/invites/{inviteId}:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+      - name: inviteId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    delete:
+      operationId: revokeTeamInvite
+      summary: 所有者或管理员撤销邀请码，可重复调用
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}/activities:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    get:
+      operationId: listTeamActivities
+      summary: 团队成员读取真实操作日志
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: action
+          in: query
+          description: 准确操作代码，例如 comment.created、task.moved；未知类型返回 400
+          schema:
+            type: string
+        - name: target_type
+          in: query
+          description: team/user/invite/project/task/comment
+          schema:
+            type: string
+        - name: actor_id
+          in: query
+          description: 正整数 ID 字符串，允许查询历史离队成员
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          description: 可选项目 ID，与路由所属团队或项目同时约束，不能跨范围读取
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: 包含时区的 RFC3339 时间，开始边界包含，例如 2026-10-31T00:00:00+08:00
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 包含时区的 RFC3339 时间，结束边界包含；早于 from 返回 400
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityPageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}/projects:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    get:
+      operationId: listProjects
+      summary: 当前团队成员查看项目列表
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          description: 仅按项目自身 archived_at 筛选；团队归档时全部项目仍只读
+          schema:
+            type: string
+            enum: [all, active, archived]
+            default: all
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectPageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createProject
+      summary: 团队所有者或管理员创建项目
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /projects/{projectId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    get:
+      operationId: getProject
+      summary: 按当前团队成员关系查看项目
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateProject
+      summary: 团队所有者或管理员修改项目资料
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /projects/{projectId}/archive:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    post:
+      operationId: archiveProject
+      summary: 归档项目，保留内容与历史；重复归档返回 409
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /projects/{projectId}/activities:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+        description: uint64 范围内的正整数 ID 字符串
+    get:
+      operationId: listProjectActivities
+      summary: 当前团队成员读取本项目的真实操作记录
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: action
+          in: query
+          description: 准确操作代码，例如 comment.created、task.moved；未知类型返回 400
+          schema:
+            type: string
+        - name: target_type
+          in: query
+          description: team/user/invite/project/task/comment
+          schema:
+            type: string
+        - name: actor_id
+          in: query
+          description: 正整数 ID 字符串，允许查询历史离队成员
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          description: 可选项目 ID，与路由所属团队或项目同时约束，不能跨范围读取
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: 包含时区的 RFC3339 时间，开始边界包含，例如 2026-10-31T00:00:00+08:00
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 包含时区的 RFC3339 时间，结束边界包含；早于 from 返回 400
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityPageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /projects/{projectId}/tasks:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+    get:
+      operationId: listTasks
+      summary: 分页筛选当前项目任务
+      description: 当前团队成员可读，排除软删除；按状态列顺序及 position/id 排序。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: keyword
+          in: query
+          description: 标题或描述关键词，最多 100 字符；按字面匹配百分号和下划线
+          schema:
+            type: string
+            maxLength: 100
+        - name: status
+          in: query
+          description: 任务状态
+          schema:
+            type: string
+            enum: [todo, in_progress, in_review, done]
+        - name: priority
+          in: query
+          description: 优先级
+          schema:
+            type: string
+            enum: [low, medium, high, urgent]
+        - name: overdue
+          in: query
+          description: 未完成且截止日期早于上海当天为逾期；只接受 true/false
+          schema:
+            type: boolean
+        - name: assignee_id
+          in: query
+          description: 当前项目负责人 ID；unassigned 表示未分配
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: revision
+          in: query
+          description: 可选的看板快照计数；加载更多时传上次看板 revision，不一致返回 409/BOARD_CHANGED，客户端重载看板
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskPageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createTask
+      summary: 当前团队成员创建任务
+      description: 默认 todo/medium，插入待办列末尾；负责人须为当前活跃成员；归档只读；每用户每小时最多 300 次。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+  /projects/{projectId}/board:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+    get:
+      operationId: getBoard
+      summary: 读取真实四列看板快照
+      description: 始终返回四列，按 todo/in_progress/in_review/done 顺序，每列首批最多 50 条；筛选掉的列返回零条；使用列表接口按列加载更多并携带 revision。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: keyword
+          in: query
+          description: 标题或描述关键词，最多 100 字符；按字面匹配百分号和下划线
+          schema:
+            type: string
+            maxLength: 100
+        - name: status
+          in: query
+          description: 任务状态
+          schema:
+            type: string
+            enum: [todo, in_progress, in_review, done]
+        - name: priority
+          in: query
+          description: 优先级
+          schema:
+            type: string
+            enum: [low, medium, high, urgent]
+        - name: overdue
+          in: query
+          description: 未完成且截止日期早于上海当天为逾期；只接受 true/false
+          schema:
+            type: boolean
+        - name: assignee_id
+          in: query
+          description: 当前项目负责人 ID；unassigned 表示未分配
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /tasks/{taskId}:
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+    get:
+      operationId: getTask
+      summary: 查看任务详情与当前权限
+      description: 非当前团队成员或软删除任务统一 404；归档内容可读。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateTask
+      summary: 编辑任务资料并校验版本
+      description: 当前成员可编辑，version 必填；至少提供一个业务字段；状态和位置只能由 move 修改。过期版本返回 VERSION_CONFLICT；明确传 null 清空日期或负责人，省略保持原值。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteTask
+      summary: 软删除任务并校验版本
+      description: 仅创建者、团队 owner/admin；归档只读；成功压紧原列顺序并写日志。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /tasks/{taskId}/move:
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+    post:
+      operationId: moveTask
+      summary: 移动任务状态与位置
+      description: 当前成员可操作，锁定团队和项目；before_task_id 为同项目目标列任务，null/省略表示列末；自身目标 400，目标变更或版本过期 409。排序影响的相邻任务也递增版本；无位置变化不递增版本或写日志。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveTaskRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /me/tasks:
+    get:
+      operationId: listMyTasks
+      summary: 查询分配给自己的真实任务
+      description: 仅限当前仍有成员权限的团队，包含归档项目只读任务；不支持负责人或 revision 筛选；按有截止日期优先、截止日期升序、更新时间及 ID 倒序。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: keyword
+          in: query
+          description: 标题或描述关键词，最多 100 字符；按字面匹配百分号和下划线
+          schema:
+            type: string
+            maxLength: 100
+        - name: status
+          in: query
+          description: 任务状态
+          schema:
+            type: string
+            enum: [todo, in_progress, in_review, done]
+        - name: priority
+          in: query
+          description: 优先级
+          schema:
+            type: string
+            enum: [low, medium, high, urgent]
+        - name: overdue
+          in: query
+          description: 未完成且截止日期早于上海当天为逾期；只接受 true/false
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskPageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /tasks/{taskId}/comments:
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+    get:
+      operationId: listComments
+      summary: 当前团队成员分页查看任务评论
+      description: 按 ID 倒序，排除软删除评论；任务已删除或非成员为 404；归档可读，can_edit/can_delete 为 false。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000000
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentPageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createComment
+      summary: 发表纯文本评论
+      description: 当前团队成员可发表，归档禁止写入。评论与日志同事务，每用户每小时最多 120 次；不修改任务 version 或看板 revision。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommentRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+  /comments/{commentId}:
+    parameters:
+      - name: commentId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+    patch:
+      operationId: updateComment
+      summary: 作者编辑评论并校验版本
+      description: 仅作者，团队管理员不能编辑他人内容；过期版本返回 409/COMMENT_VERSION_CONFLICT；归档只读，已删除或失去成员权限为 404。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCommentRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteComment
+      summary: 作者或团队管理员软删除评论
+      description: 作者、团队 owner/admin 可操作；version 查询参数必填，过期版本 409；保留历史，不删除日志。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /teams/{teamId}/statistics:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+    get:
+      operationId: getTeamStatistics
+      summary: 查看团队真实任务统计
+      description: 当前团队成员可查看；非成员统一 404，平台 admin 无隐式权限。包含归档任务，排除软删除；按上海当天判定逾期，已完成不逾期。同一 MySQL 读事务完成全部聚合，不使用缓存或列表分页。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /projects/{projectId}/statistics:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+    get:
+      operationId: getProjectStatistics
+      summary: 查看项目真实任务统计
+      description: 当前团队成员可查看；非成员统一 404，平台 admin 无隐式权限。包含归档任务，排除软删除；按上海当天判定逾期，已完成不逾期。同一 MySQL 读事务完成全部聚合，不使用缓存或列表分页。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /admin/statistics:
+    get:
+      operationId: getAdminStatistics
+      summary: 平台管理员读取全局统计
+      description: 仅当前活跃平台 admin。任务/评论排除软删除，包含归档项目；admins 是活跃管理员数。
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStatisticsEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      summary: 管理员分页查询用户
+      description: status=all/active/disabled，role=all/admin/user，关键词匹配邮箱或昵称；仅返回公开管理字段。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}
+        - name: page_size
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - name: keyword
+          in: query
+          schema: {type: string, maxLength: 100}
+        - name: status
+          in: query
+          schema: {type: string, default: all}
+        - name: role
+          in: query
+          schema: {type: string, enum: [all, admin, user], default: all}
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserPageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /admin/users/{userId}/status:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+    patch:
+      operationId: changeUserStatus
+      summary: 禁用或启用用户并撤销旧会话
+      description: 不能禁用自己。状态实际改变时递增 session_version 并清理 Redis 会话；Redis 清理失败也不会使旧会话恢复。禁止自动转让 owner 或清空分配。相同状态不重复审计。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserStatusRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /admin/teams:
+    get:
+      operationId: listAdminTeams
+      summary: 查看所有团队基本资料及数量
+      description: status=all/active/archived，关键词匹配名称或简介。此能力不授予团队任务访问或编辑权限。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}
+        - name: page_size
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - name: keyword
+          in: query
+          schema: {type: string, maxLength: 100}
+        - name: status
+          in: query
+          schema: {type: string, default: all}
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTeamPageEnvelope'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /admin/teams/{teamId}/archive:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,19}$'
+    post:
+      operationId: adminArchiveTeam
+      summary: 平台管理员归档异常团队
+      description: reason 必填，保留所有权和历史；平台审计、团队日志、归档同事务；已归档返回 409。
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminArchiveRequest'
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: taskflow_session
+  responses:
+    Error:
+      description: 400 参数错误；401 登录失效；403 权限不足；404 资源不存在或不可访问；409 状态冲突；429 限流；503 依赖不可用
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    HealthEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          type: object
+          required: [status]
+          properties:
+            status:
+              type: string
+              enum: [alive, ready, not_ready]
+            checks:
+              type: object
+              properties:
+                mysql:
+                  $ref: '#/components/schemas/CheckState'
+                redis:
+                  $ref: '#/components/schemas/CheckState'
+                migrations:
+                  $ref: '#/components/schemas/CheckState'
+    CheckState:
+      type: string
+      enum: [ok, unavailable]
+    UserEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          $ref: '#/components/schemas/User'
+    User:
+      type: object
+      required: [id, email, nickname, platform_role, created_at]
+      properties:
+        id:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+        email:
+          type: string
+          format: email
+        nickname:
+          type: string
+        platform_role:
+          type: string
+          enum: [user, admin]
+        created_at:
+          type: string
+          format: date-time
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, nickname, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: ASCII 邮箱，首尾空白会移除，并统一转小写
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 40
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          description: 至少 8 个 Unicode 字符，且 UTF-8 编码不超过 72 字节
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    ProfileRequest:
+      type: object
+      additionalProperties: false
+      required: [nickname]
+      properties:
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 40
+    PasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [old_password, new_password]
+      properties:
+        old_password:
+          type: string
+          format: password
+        new_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          description: 与原密码不同；至少 8 个 Unicode 字符，且 UTF-8 编码不超过 72 字节
+    ErrorEnvelope:
+      type: object
+      required: [error, request_id]
+      properties:
+        request_id:
+          type: string
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    Team:
+      type: object
+      required: [id, name, description, owner_id, my_role, member_count, archived_at, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        owner_id:
+          type: string
+        my_role:
+          type: string
+          enum: [owner, admin, member]
+        member_count:
+          type: integer
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Member:
+      type: object
+      required: [user_id, nickname, email, role, status, joined_at]
+      properties:
+        user_id:
+          type: string
+        nickname:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [owner, admin, member]
+        status:
+          type: string
+          enum: [active, disabled]
+        joined_at:
+          type: string
+          format: date-time
+    Invite:
+      type: object
+      required: [id, team_id, expires_at, max_uses, used_count, revoked_at, created_by, created_at, status]
+      properties:
+        id:
+          type: string
+        team_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        max_uses:
+          type: integer
+        used_count:
+          type: integer
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, revoked, expired, exhausted]
+          description: 团队归档时即使邀请码仍显示 active 也不能加入
+    Activity:
+      type: object
+      required: [id, team_id, project_id, actor_id, actor_nickname, action, target_type, target_id, metadata, created_at]
+      properties:
+        project_id:
+          type: string
+          nullable: true
+          description: 团队级操作为 null，项目级操作为项目 ID
+        id:
+          type: string
+        team_id:
+          type: string
+        actor_id:
+          type: string
+        actor_nickname:
+          type: string
+        action:
+          type: string
+        target_type:
+          type: string
+        target_id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+    CreateTeamRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 2000
+          default: ''
+    UpdateTeamRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 2000
+    TeamRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, member]
+    TransferOwnershipRequest:
+      type: object
+      additionalProperties: false
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+    JoinTeamRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9a-fA-F]{64}$'
+          description: 完整邀请码；前后空白会移除，码本身区分大小写
+    CreateTeamInviteRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        expires_in_days:
+          type: integer
+          minimum: 1
+          maximum: 30
+          default: 7
+        max_uses:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+    TeamEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          $ref: '#/components/schemas/Team'
+    TeamPageEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          type: object
+          required: [items, page, page_size, total]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Team'
+            page:
+              type: integer
+            page_size:
+              type: integer
+            total:
+              type: integer
+              format: int64
+    MemberPageEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          type: object
+          required: [items, page, page_size, total]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Member'
+            page:
+              type: integer
+            page_size:
+              type: integer
+            total:
+              type: integer
+              format: int64
+    InvitePageEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          type: object
+          required: [items, page, page_size, total]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Invite'
+            page:
+              type: integer
+            page_size:
+              type: integer
+            total:
+              type: integer
+              format: int64
+    ActivityPageEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          type: object
+          required: [items, page, page_size, total]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Activity'
+            page:
+              type: integer
+            page_size:
+              type: integer
+            total:
+              type: integer
+              format: int64
+    InviteCreatedEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          type: object
+          required: [invite, code]
+          properties:
+            invite:
+              $ref: '#/components/schemas/Invite'
+            code:
+              type: string
+              description: 仅此响应返回，列表不再提供，不进入日志
+    JoinedTeamEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          type: object
+          required: [team, already_joined]
+          properties:
+            team:
+              $ref: '#/components/schemas/Team'
+            already_joined:
+              type: boolean
+    Project:
+      type: object
+      required: [id, team_id, team_name, my_role, team_archived_at, name, description, created_by, creator_nickname, archived_at, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        team_id:
+          type: string
+        team_name:
+          type: string
+        my_role:
+          type: string
+          enum: [owner, admin, member]
+        team_archived_at:
+          type: string
+          format: date-time
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+        created_by:
+          type: string
+        creator_nickname:
+          type: string
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateProjectRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 2000
+          default: ''
+    UpdateProjectRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 2000
+    ProjectEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          $ref: '#/components/schemas/Project'
+    ProjectPageEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          type: object
+          required: [items, page, page_size, total]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Project'
+            page:
+              type: integer
+            page_size:
+              type: integer
+            total:
+              type: integer
+              format: int64
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, in_review, done]
+    TaskPriority:
+      type: string
+      enum: [low, medium, high, urgent]
+    CreateTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 2000
+          default: ''
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+          default: medium
+        assignee_id:
+          type: string
+          nullable: true
+          description: 当前团队活跃成员的用户 ID；null 或省略表示未分配
+        due_at:
+          type: string
+          format: date
+          nullable: true
+          description: YYYY-MM-DD，有效年份 1000—9999；null 或省略表示无截止日期
+    UpdateTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      minProperties: 2
+      description: version 与至少一个业务字段；省略字段不变，仅负责人/日期支持显式 null 清空
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 2000
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        assignee_id:
+          type: string
+          nullable: true
+        due_at:
+          type: string
+          format: date
+          nullable: true
+    MoveTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [version, status]
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        before_task_id:
+          type: string
+          nullable: true
+          description: 插入到同项目目标列该任务前；null 或省略放到列末
+    Task:
+      type: object
+      required: [id, project_id, project_name, team_id, team_name, my_role, project_archived_at, team_archived_at, title, description, status, priority, assignee_id, assignee_nickname, created_by, creator_nickname, due_at, is_overdue, position, version, can_delete, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        project_name:
+          type: string
+        team_id:
+          type: string
+        team_name:
+          type: string
+        my_role:
+          type: string
+          enum: [owner, admin, member]
+        title:
+          type: string
+        description:
+          type: string
+        assignee_id:
+          type: string
+          nullable: true
+        assignee_nickname:
+          type: string
+          nullable: true
+        created_by:
+          type: string
+        creator_nickname:
+          type: string
+        due_at:
+          type: string
+          nullable: true
+          format: date
+        project_archived_at:
+          type: string
+          nullable: true
+          format: date-time
+        team_archived_at:
+          type: string
+          nullable: true
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        is_overdue:
+          type: boolean
+        can_delete:
+          type: boolean
+        position:
+          type: integer
+          format: int64
+          minimum: 0
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    TaskPage:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+          format: int64
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 项目任务列表包含；我的任务响应不含此字段
+    BoardColumn:
+      type: object
+      required: [status, items, total, page_size, has_more]
+      properties:
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/Task'
+        total:
+          type: integer
+          format: int64
+          description: 本列符合筛选条件的实际总数
+        page_size:
+          type: integer
+          enum: [50]
+        has_more:
+          type: boolean
+    Board:
+      type: object
+      required: [project, revision, columns]
+      properties:
+        project:
+          $ref: '#/components/schemas/Project'
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+        columns:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/BoardColumn'
+    TaskEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          $ref: '#/components/schemas/Task'
+    TaskPageEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          $ref: '#/components/schemas/TaskPage'
+    BoardEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          $ref: '#/components/schemas/Board'
+    CreateCommentRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: 去除前后空白后校验，纯文本，不能全为空白
+    UpdateCommentRequest:
+      type: object
+      additionalProperties: false
+      required: [content, version]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    Comment:
+      type: object
+      required: [id, task_id, author_id, author_nickname, content, version, can_edit, can_delete, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        task_id:
+          type: string
+        author_id:
+          type: string
+        author_nickname:
+          type: string
+        content:
+          type: string
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        can_edit:
+          type: boolean
+        can_delete:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CommentEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          $ref: '#/components/schemas/Comment'
+    CommentPageEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          type: object
+          required: [items, page, page_size, total]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Comment'
+            page:
+              type: integer
+            page_size:
+              type: integer
+            total:
+              type: integer
+              format: int64
+    CountGroup:
+      type: object
+      required: [key, count]
+      properties:
+        key:
+          type: string
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+    AssigneeStatistics:
+      type: object
+      required: [user_id, nickname, total, completed, overdue]
+      properties:
+        user_id:
+          type: string
+          nullable: true
+          description: null 表示未分配，始终包含未分配组，即使为零
+        nickname:
+          type: string
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        completed:
+          type: integer
+          format: int64
+          minimum: 0
+        overdue:
+          type: integer
+          format: int64
+          minimum: 0
+    Statistics:
+      type: object
+      required: [scope, team_id, project_id, name, archived, as_of, today, timezone, total, completed, uncompleted, overdue, completion_rate, by_status, by_priority, by_assignee]
+      properties:
+        scope:
+          type: string
+          enum: [team, project]
+        team_id:
+          type: string
+        project_id:
+          type: string
+          nullable: true
+          description: 团队统计为 null
+        name:
+          type: string
+        archived:
+          type: boolean
+          description: 团队或当前项目归档；归档仍可读取统计
+        as_of:
+          type: string
+          format: date-time
+        today:
+          type: string
+          format: date
+          description: 本次请求使用的上海日历日期
+        timezone:
+          type: string
+          enum: [Asia/Shanghai]
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        completed:
+          type: integer
+          format: int64
+          minimum: 0
+        uncompleted:
+          type: integer
+          format: int64
+          minimum: 0
+        overdue:
+          type: integer
+          format: int64
+          minimum: 0
+        completion_rate:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: 已完成/总数的百分比，四舍五入一位小数；无任务时为 0
+        by_status:
+          type: array
+          minItems: 4
+          maxItems: 4
+          description: 固定 todo/in_progress/in_review/done 顺序，补足零值
+          items:
+            $ref: '#/components/schemas/CountGroup'
+        by_priority:
+          type: array
+          minItems: 4
+          maxItems: 4
+          description: 固定 low/medium/high/urgent 顺序，补足零值
+          items:
+            $ref: '#/components/schemas/CountGroup'
+        by_assignee:
+          type: array
+          minItems: 1
+          description: 有任务的负责人及未分配组；不是全部团队成员，不分页
+          items:
+            $ref: '#/components/schemas/AssigneeStatistics'
+    StatisticsEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id:
+          type: string
+        data:
+          $ref: '#/components/schemas/Statistics'
+    UserStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status: {type: string, enum: [active, disabled]}
+        reason: {type: string, minLength: 1, maxLength: 500}
+    AdminArchiveRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 1, maxLength: 500}
+    AdminUser:
+      type: object
+      required: [id, email, nickname, platform_role, status, owned_team_count, created_at, updated_at]
+      properties:
+        id: {type: string}
+        email: {type: string}
+        nickname: {type: string}
+        platform_role: {type: string, enum: [admin, user]}
+        status: {type: string, enum: [active, disabled]}
+        owned_team_count: {type: integer, format: int64}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AdminTeam:
+      type: object
+      required: [id, name, description, owner_id, owner_nickname, owner_email, member_count, project_count, task_count, archived_at, created_at]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        description: {type: string}
+        owner_id: {type: string}
+        owner_nickname: {type: string}
+        owner_email: {type: string}
+        member_count: {type: integer, format: int64}
+        project_count: {type: integer, format: int64}
+        task_count: {type: integer, format: int64}
+        archived_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+    AdminStatistics:
+      type: object
+      required: [users, active_users, disabled_users, admins, teams, archived_teams, projects, archived_projects, tasks, completed_tasks, overdue_tasks, comments, as_of, today, timezone]
+      properties:
+        users: {type: integer, format: int64, minimum: 0}
+        active_users: {type: integer, format: int64, minimum: 0}
+        disabled_users: {type: integer, format: int64, minimum: 0}
+        admins: {type: integer, format: int64, minimum: 0}
+        teams: {type: integer, format: int64, minimum: 0}
+        archived_teams: {type: integer, format: int64, minimum: 0}
+        projects: {type: integer, format: int64, minimum: 0}
+        archived_projects: {type: integer, format: int64, minimum: 0}
+        tasks: {type: integer, format: int64, minimum: 0}
+        completed_tasks: {type: integer, format: int64, minimum: 0}
+        overdue_tasks: {type: integer, format: int64, minimum: 0}
+        comments: {type: integer, format: int64, minimum: 0}
+        as_of: {type: string, format: date-time}
+        today: {type: string, format: date}
+        timezone: {type: string, enum: [Asia/Shanghai]}
+    AdminStatisticsEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id: {type: string}
+        data:
+          $ref: '#/components/schemas/AdminStatistics'
+    AdminUserEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id: {type: string}
+        data:
+          $ref: '#/components/schemas/AdminUser'
+    AdminUserPageEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id: {type: string}
+        data:
+          type: object
+          required: [items, page, page_size, total]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminUser'
+            page: {type: integer}
+            page_size: {type: integer}
+            total: {type: integer, format: int64}
+    AdminTeamPageEnvelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        request_id: {type: string}
+        data:
+          type: object
+          required: [items, page, page_size, total]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminTeam'
+            page: {type: integer}
+            page_size: {type: integer}
+            total: {type: integer, format: int64}
