@@ -2,13 +2,11 @@
 
 **Team Collaboration & Project Management Platform**
 
-原项目名为 TaskFlow；内部模块名、数据库名和环境变量沿用 `taskflow`，方便现有环境平滑运行。
+CollabForge 是一个团队项目协作平台，提供团队与成员管理、项目看板、任务分配、评论、活动记录和统计分析，帮助团队跟踪工作进度并管理协作流程。
 
-可真实运行、适合 Go 初学者学习与校招演示的团队项目协作平台。**1.0 交付版，阶段 0—8 已完成。**
+后端采用 Go、Gin、GORM、MySQL 和 Redis，前端采用 Vue 3、TypeScript、Element Plus 和 Pinia，支持通过 Docker Compose 部署。
 
-Go + Gin + GORM + MySQL + Redis，Vue 3 + TypeScript + Element Plus + Pinia，Docker Compose 单体部署。没有微服务、Kubernetes、消息队列或伪造业务接口。
-
-## 已实现
+## 功能特性
 
 | 模块 | 能力 |
 |---|---|
@@ -17,9 +15,9 @@ Go + Gin + GORM + MySQL + Redis，Vue 3 + TypeScript + Element Plus + Pinia，Do
 | 项目 | 创建/编辑/归档，继承当前团队成员权限 |
 | 任务 | 四列看板、拖拽与按钮排序、单负责人、优先级、日期、筛选、我的任务 |
 | 协作 | 纯文本评论增删改、团队/项目日志检索、乐观锁冲突 |
-| 统计 | 状态/优先级/负责人分布、完成率与逾期，真实 SQL 聚合 |
+| 统计 | 状态/优先级/负责人分布、完成率与逾期统计 |
 | 后台 | 安全初始化管理员、用户禁用/启用、全会话撤销、团队归档、平台审计 |
-| 交付 | 独立真实集成与浏览器测试、三账号完整流程、真实依赖故障恢复 |
+| 测试 | 集成测试、浏览器端到端测试、多账号协作流程与依赖故障恢复验证 |
 
 ## 快速启动
 
@@ -46,11 +44,11 @@ docker compose down
 docker compose up -d
 ```
 
-项目不提供删除数据卷或批量删除工作区文件的命令。迁移版本 **12**，已有环境直接 up --build -d 原地升级。
+当前数据库迁移版本为 **12**，已有环境可执行 `docker compose up --build -d` 升级。
 
 ## 注册与管理员
 
-普通账号自行注册，注册后登录。两个独立浏览器或浏览器配置用于双账号协作演示。
+用户注册后即可登录，并创建团队或通过邀请码加入团队。
 
 新环境初始化管理员：
 
@@ -88,7 +86,7 @@ npm run dev
 
 浏览器访问 http://localhost:5173，Vite 将 /api 同源代理到 127.0.0.1:8081。Compose 内后端不向宿主机暴露业务端口。本地 Go 不自动读取 .env。
 
-## 测试与最终验收
+## 测试与验证
 
 先安装前端依赖和测试浏览器：
 
@@ -106,7 +104,7 @@ cd ..
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' ./scripts/verify.sh
 ```
 
-总验收依次执行私有配置初始化测试、Compose 校验、Go 单元/静态检查/构建、OpenAPI 与文档校验、前端类型与构建、真实集成、模块浏览器回归、独立三账号流程与故障恢复。需要宿主机 Go、Node、Docker；失败即非零退出。
+验证脚本依次执行私有配置初始化测试、Compose 校验、Go 单元/静态检查/构建、OpenAPI 与文档校验、前端类型与构建、集成测试、浏览器回归、多账号协作流程与故障恢复验证。需要宿主机 Go、Node、Docker；失败即非零退出。
 
 也可分别运行：
 
@@ -118,11 +116,11 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/Ma
 ./scripts/test-workflow.sh
 ```
 
-Go 集成使用独立 taskflow_test/Redis（13306/16379）；浏览器使用独立 18080 真实应用、MySQL/Redis，测试后停止。三账号流程另启一套全新测试状态，以保留实际注册限流而不污染主库。E2E_WEB_PORT 可修改端口。直接 npm run test:e2e 会在所选目标写真实数据；完整验证使用脚本，管理员场景需要脚本的 CLI 初始化。
+Go 集成使用独立 taskflow_test/Redis（13306/16379）；浏览器测试使用独立的 18080 应用端口及 MySQL/Redis 环境，测试后停止。三账号流程另启一套全新测试状态，以保留实际注册限流而不污染主库。E2E_WEB_PORT 可修改端口。直接 npm run test:e2e 会在所选目标写真实数据；完整验证使用脚本，管理员场景需要脚本的 CLI 初始化。
 
-普通 go test 未设置 TASKFLOW_INTEGRATION 时明确跳过外部依赖测试。脚本失败时查看退出码、最后的失败用例及 frontend/test-results 中的错误上下文；单项重跑见各阶段验收文档。
+普通 go test 未设置 TASKFLOW_INTEGRATION 时明确跳过外部依赖测试。脚本失败时查看退出码、最后的失败用例及 frontend/test-results 中的错误上下文；测试覆盖说明见 [测试矩阵](docs/test-matrix.md)。
 
-## 口径与权限
+## 业务规则与权限
 
 - 团队 owner/admin/member 与平台 admin/user 分开判断；平台管理员不自动获得团队任务权限。
 - 所有资源查询校验当前成员和所属团队。成员退出/被移除后清空该团队未删除任务分配；owner 必须先转让再退出。
@@ -134,13 +132,11 @@ Go 集成使用独立 taskflow_test/Redis（13306/16379）；浏览器使用独�
 
 ## 文档入口
 
-- [最终验收与范围](docs/acceptance-stage-8.md)、[最终实测记录](docs/verification-stage-8.md)
-- [三账号演示流程](docs/demo.md)、[学习与校招讲解](docs/learning-guide.md)
 - [架构与核心 Go 文件](docs/architecture.md)、[数据库](docs/database.md)、[完整 API](docs/openapi.yaml)
-- [功能与测试覆盖](docs/test-matrix.md)、[模块实施记录](docs/roadmap.md)
+- [功能与测试覆盖](docs/test-matrix.md)
 
-## 常见故障与边界
+## 常见问题与功能范围
 
-Docker daemon 不可用时先启动 Docker；配置缺失时检查 .env 和 shell 加载；502 检查 backend/Nginx；ready=503 检查依赖与迁移。Origin=403 时使用配置中的同源地址，避免在 localhost 与 127.0.0.1 间混用。429 表示真实限流，按提示等待；集成/浏览器测试使用独立环境。旧页面在更新后动态资源加载失败时刷新整页。
+Docker daemon 不可用时先启动 Docker；配置缺失时检查 .env 和 shell 加载；502 检查 backend/Nginx；ready=503 检查依赖与迁移。Origin=403 时使用配置中的同源地址，避免在 localhost 与 127.0.0.1 间混用。429 表示请求触发限流，按提示等待；集成/浏览器测试使用独立环境。旧页面在更新后动态资源加载失败时刷新整页。
 
-首版无实时推送、邮件、附件、楼层回复、Markdown、自定义流程、趋势历史、导出、恢复归档/删除、在线提权或管理员重置他人密码。平台审计已入库，暂无检索页面。负责人统计一次返回全部分组，整列重排适合中小项目；未宣称经过大规模性能或高可用验证。
+当前版本暂不支持实时推送、邮件、附件、楼层回复、Markdown、自定义流程、趋势历史、导出、恢复归档/删除、在线提权或管理员重置他人密码。平台审计已入库，暂无检索页面。负责人统计一次返回全部分组，整列重排适合中小项目。
